@@ -5,8 +5,10 @@ import org.springframework.stereotype.Service;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.core.sync.ResponseTransformer;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.PresignedPutObjectRequest;
 import software.amazon.awssdk.regions.Region;
@@ -33,11 +35,6 @@ public class S3Service {
         this.bucketName = bucketName;
         this.region = Region.of(regionName);
 
-        System.out.println("Access Key: " + this.accessKey);
-        System.out.println("Secret Key: " + this.secretKey);
-        System.out.println("Bucket Name: " + this.bucketName);
-        System.out.println("Region: " + this.region);
-
         AwsBasicCredentials credentials = AwsBasicCredentials.create(this.accessKey, this.secretKey);
 
         this.s3Client = S3Client.builder()
@@ -49,6 +46,27 @@ public class S3Service {
                 .region(this.region)
                 .credentialsProvider(StaticCredentialsProvider.create(credentials))
                 .build();
+    }
+
+    public String getPresignedUrl(String key) {
+        PutObjectRequest putObjectRequest = PutObjectRequest.builder()
+                .bucket(this.bucketName)
+                .key(key)
+                .build();
+
+        PresignedPutObjectRequest presignedRequest = s3Presigner
+                .presignPutObject(r -> r.signatureDuration(Duration.ofMinutes(10)).putObjectRequest(putObjectRequest));
+
+        return presignedRequest.url().toString();
+    }
+
+    public String getObjectContent(String key) {
+        GetObjectRequest getObjectRequest = GetObjectRequest.builder()
+                .bucket(this.bucketName)
+                .key(key)
+                .build();
+
+        return s3Client.getObject(getObjectRequest, ResponseTransformer.toBytes()).asUtf8String();
     }
 
     public void uploadArtifact(String key, String filePath) {
@@ -64,15 +82,4 @@ public class S3Service {
         System.out.println("Upload successful.");
     }
 
-    public String getPresignedUrl(String key) {
-        PutObjectRequest putObjectRequest = PutObjectRequest.builder()
-                .bucket(this.bucketName)
-                .key(key)
-                .build();
-
-        PresignedPutObjectRequest presignedRequest = s3Presigner
-                .presignPutObject(r -> r.signatureDuration(Duration.ofMinutes(10)).putObjectRequest(putObjectRequest));
-
-        return presignedRequest.url().toString();
-    }
 }
