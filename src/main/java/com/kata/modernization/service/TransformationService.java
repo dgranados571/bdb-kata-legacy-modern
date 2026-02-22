@@ -23,11 +23,9 @@ public class TransformationService {
 
         String cobolContent = s3Service.getObjectContent(s3Key);
 
-        // --- SIMULACION DE BLU AGE ANALYZER ---
         metaDatosCobol.add("[BLU-AGE-ANALYZER] Scanning WORKING-STORAGE SECTION...");
         List<String> discoveredFields = new ArrayList<>();
 
-        // Regex simple para detectar variables COBOL (Nivel 01 o 05 seguidos de nombre)
         Pattern fieldPattern = Pattern.compile("(01|05)\\s+([A-Z0-9-]+)\\s+PIC");
         Matcher matcher = fieldPattern.matcher(cobolContent);
 
@@ -38,7 +36,6 @@ public class TransformationService {
 
         metaDatosCobol.add("[BLU-AGE-ANALYZER] Total components discovered: " + discoveredFields.size());
 
-        // --- SIMULACION DE BLU AGE VELOCITY (GENERATOR) ---
         metaDatosCobol.add("[BLU-AGE-VELOCITY] Generating Java Domain Models...");
         for (String field : discoveredFields) {
             String javaField = toCamelCase(field);

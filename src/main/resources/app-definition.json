@@ -1,8 +1,30 @@
 {
-  "definition": {
-    "content": "{\n  \"template-version\": \"2022-03-31\",\n  \"source-locations\": [\n    {\n      \"source-id\": \"s3-source\",\n      \"source-type\": \"s3\",\n      \"properties\": {\n        \"s3-bucket\": \"my-modernization-bucket\",\n        \"s3-key-prefix\": \"code/\"\n      }\n    }\n  ],\n  \"executives\": [\n    {\n      \"name\": \"my-engine\",\n      \"type\": \"bluage\",\n      \"version\": \"3.10.0\"\n    }\n  ]\n}"
-  },
-  "description": "Ejemplo de aplicación modernizada",
-  "engineType": "bluage",
-  "name": "ModernizationExampleApp"
+  "template-version": "2022-03-31",
+  "source-locations": [
+    {
+      "source-id": "s3-source",
+      "source-type": "s3",
+      "properties": {
+        "s3-bucket": "${S3_BUCKET}",
+        "s3-key-prefix": "${S3_PREFIX}"
+      }
+    }
+  ],
+  "output-locations": [
+    {
+      "output-id": "s3-output",
+      "output-type": "s3",
+      "properties": {
+        "s3-bucket": "${S3_BUCKET}",
+        "s3-key-prefix": "MODERNIZED_CODE/"
+      }
+    }
+  ],
+  "executives": [
+    {
+      "name": "my-engine",
+      "type": "bluage",
+      "version": "3.10.0"
+    }
+  ]
 }
