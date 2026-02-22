@@ -18,42 +18,200 @@ public class TransformationService {
     }
 
     public List<String> transformCobolToJava(String s3Key) {
-        List<String> metaDatosCobol = new ArrayList<>();
-        metaDatosCobol.add("[BLU-AGE-ANALYZER] Starting analysis for S3 key: " + s3Key);
+        List<String> logs = new ArrayList<>();
+        List<String> appliedRules = new ArrayList<>();
+        List<String> warnings = new ArrayList<>();
+
+        logs.add("[BLU-AGE-ANALYZER] --- PHASE 1: ANALYSIS ---");
+        logs.add("[BLU-AGE-ANALYZER] Starting analysis for S3 key: " + s3Key);
 
         String cobolContent = s3Service.getObjectContent(s3Key);
+        String className = extractClassName(s3Key);
 
-        metaDatosCobol.add("[BLU-AGE-ANALYZER] Scanning WORKING-STORAGE SECTION...");
-        List<String> discoveredFields = new ArrayList<>();
+        logs.add("[BLU-AGE-ANALYZER] Scanning WORKING-STORAGE SECTION...");
+        List<String[]> discoveredFields = new ArrayList<>();
 
-        Pattern fieldPattern = Pattern.compile("(01|05)\\s+([A-Z0-9-]+)\\s+PIC");
+        Pattern fieldPattern = Pattern.compile("(?m)^\\s*(01|05|10)\\s+([A-Z0-9-]+)\\s+PIC\\s+([^.\\s]+)");
         Matcher matcher = fieldPattern.matcher(cobolContent);
 
         while (matcher.find()) {
-            discoveredFields.add(matcher.group(2));
-            metaDatosCobol.add("[BLU-AGE-ANALYZER] Found metadata entry: " + matcher.group(2));
+            String name = matcher.group(2);
+            String pic = matcher.group(3);
+
+            if (name.equalsIgnoreCase("FILLER")) {
+                appliedRules.add("Rule 3: Redundant Field Filtering (Ignored FILLER field)");
+                continue;
+            }
+
+            discoveredFields.add(new String[] { name, pic });
+            logs.add("[BLU-AGE-ANALYZER] Component identified: " + name + " (Type: " + pic + ")");
         }
 
-        metaDatosCobol.add("[BLU-AGE-ANALYZER] Total components discovered: " + discoveredFields.size());
+        logs.add("[BLU-AGE-VELOCITY] --- PHASE 2: GENERATION (VELOCITY ENGINE) ---");
+        logs.add("[BLU-AGE-VELOCITY] Generating Java Class: " + className + ".java");
 
-        metaDatosCobol.add("[BLU-AGE-VELOCITY] Generating Java Domain Models...");
-        for (String field : discoveredFields) {
-            String javaField = toCamelCase(field);
-            metaDatosCobol.add("[BLU-AGE-VELOCITY] Mapping " + field + " -> private "
-                    + (field.contains("ID") ? "Long " : "String ") + javaField + ";");
+        StringBuilder javaCode = new StringBuilder();
+        javaCode.append("import java.math.BigDecimal;\n");
+        javaCode.append("import java.time.LocalDate;\n\n");
+        javaCode.append("public class ").append(className).append(" {\n\n");
+
+        for (String[] field : discoveredFields) {
+            String cobolName = field[0];
+            String pic = field[1];
+
+            String javaField = toCamelCase(cobolName);
+            appliedRules.add("Rule 4: Naming Standardization (Mapped " + cobolName + " to " + javaField + ")");
+
+            String javaType = "String";
+
+            if (cobolName.contains("FECHA") && (pic.contains("9(6)") || pic.contains("9(8)"))) {
+                javaType = "LocalDate";
+                appliedRules.add("Rule 1: Date Conversion (Mapped " + cobolName + " to LocalDate)");
+            } else if (pic.contains("V")) {
+                javaType = "BigDecimal";
+                appliedRules.add("Rule 2: Decimal Precision (Mapped " + cobolName + " to BigDecimal)");
+            } else if (pic.contains("9")) {
+                javaType = "Integer";
+                appliedRules.add("Rule 5: Smart Typing (Mapped " + cobolName + " to Integer)");
+            } else if (pic.contains("X")) {
+                javaType = "String";
+                appliedRules.add("Rule 5: Smart Typing (Mapped " + cobolName + " to String)");
+            } else {
+                warnings.add("Warning: Complex PIC format " + pic + " for " + cobolName + " might need manual review.");
+            }
+
+            javaCode.append("    private ").append(javaType).append(" ").append(javaField).append(";\n");
+            logs.add("[BLU-AGE-VELOCITY] Transformation: " + cobolName + " [" + pic + "] -> " + javaType + " "
+                    + javaField);
         }
 
-        metaDatosCobol.add("[BLU-AGE-VELOCITY] Packaging Spring Boot application...");
-        metaDatosCobol.add("[BLU-AGE-VELOCITY] Success: Transformation complete.");
+        logs.add("[BLU-AGE-VELOCITY] --- PHASE 2.5: LOGIC TRANSFORMATION ---");
+        logs.add("[BLU-AGE-VELOCITY] Scanning PROCEDURE DIVISION for business rules...");
 
-        return metaDatosCobol;
+        String logicMethod = transformLogic(cobolContent, appliedRules, warnings);
+        javaCode.append("\n").append(logicMethod).append("\n");
+
+        javaCode.append("    public static void main(String[] args) {\n");
+        javaCode.append("        ").append(className).append(" app = new ").append(className).append("();\n");
+        javaCode.append("        System.out.println(\"--- Starting Modernized Execution ---\");\n");
+        javaCode.append("        app.executeLegacyLogic();\n");
+        javaCode.append("        System.out.println(\"--- Execution Finished ---\");\n");
+        javaCode.append("    }\n\n");
+
+        javaCode.append("    // Getters and Setters omitted\n");
+        javaCode.append("}");
+
+        String targetKey = "MODERN_CODE/" + className + ".java";
+        try {
+            s3Service.uploadContent(targetKey, javaCode.toString());
+            logs.add("[BLU-AGE-PACKAGER] Source code uploaded to: s3://" + targetKey);
+        } catch (Exception e) {
+            warnings.add("Warning: Failed to upload source code to S3: " + e.getMessage());
+        }
+
+        logs.add("[BLU-AGE-REPORT] --- PHASE 3: MODERNIZATION REPORT ---");
+        logs.add("[BLU-AGE-REPORT] Applied Rules Count: " + appliedRules.stream().distinct().count());
+        appliedRules.stream().distinct().forEach(rule -> logs.add("[BLU-AGE-REPORT] [APPLIED] " + rule));
+
+        if (warnings.isEmpty()) {
+            logs.add("[BLU-AGE-REPORT] [STATUS] Clean migration: 0 warnings detected.");
+        } else {
+            warnings.forEach(w -> logs.add("[BLU-AGE-REPORT] [WARNING] " + w));
+        }
+
+        logs.add("[BLU-AGE-PACKAGER] --- PHASE 4: PACKAGING ---");
+        logs.add("[BLU-AGE-PACKAGER] Creating artifact: modernized-" + className.toLowerCase() + ".jar");
+        logs.add("[BLU-AGE-PACKAGER] Success: Transformation complete.");
+
+        return logs;
+    }
+
+    private String extractClassName(String s3Key) {
+        String filename = s3Key.contains("/") ? s3Key.substring(s3Key.lastIndexOf("/") + 1) : s3Key;
+        if (filename.contains(".")) {
+            filename = filename.substring(0, filename.lastIndexOf("."));
+        }
+        return toPascalCase(filename);
+    }
+
+    private String toPascalCase(String input) {
+        String camel = toCamelCase(input);
+        if (camel.isEmpty())
+            return input;
+        return Character.toUpperCase(camel.charAt(0)) + camel.substring(1);
+    }
+
+    private String transformLogic(String cobolContent, List<String> appliedRules, List<String> warnings) {
+        StringBuilder method = new StringBuilder();
+        method.append("    public void executeLegacyLogic() {\n");
+        method.append("        System.out.println(\"Executing modernized legacy logic...\");\n\n");
+
+        int procedureStart = cobolContent.indexOf("PROCEDURE DIVISION");
+        if (procedureStart == -1) {
+            method.append("        // No PROCEDURE DIVISION found.\n");
+            method.append("    }\n");
+            warnings.add("Warning: No PROCEDURE DIVISION found for logic transformation.");
+            return method.toString();
+        }
+
+        String procedureContent = cobolContent.substring(procedureStart);
+        String[] lines = procedureContent.split("\n");
+        boolean logicFound = false;
+
+        for (String line : lines) {
+            String trimmedLine = line.trim().toUpperCase();
+
+            if (trimmedLine.startsWith("MOVE ")) {
+                Pattern movePattern = Pattern.compile("MOVE\\s+([^\\s]+)\\s+TO\\s+([^.\\s]+)");
+                Matcher m = movePattern.matcher(trimmedLine);
+                if (m.find()) {
+                    String source = m.group(1).replace("'", "\"");
+                    String target = toCamelCase(m.group(2));
+                    method.append("        this.").append(target).append(" = ").append(source).append(";\n");
+                    appliedRules.add("Rule 6: Logic Mapping (MOVE " + m.group(1) + " to " + target + ")");
+                    logicFound = true;
+                }
+            } else if (trimmedLine.startsWith("COMPUTE ")) {
+                Pattern computePattern = Pattern.compile("COMPUTE\\s+([^\\s]+)\\s*=\\s*([^.]+)");
+                Matcher m = computePattern.matcher(trimmedLine);
+                if (m.find()) {
+                    String target = toCamelCase(m.group(1));
+                    String expression = m.group(2).replace("-", " - "); // Basic spacing for Java
+                    method.append("        this.").append(target).append(" = ").append(expression).append(";\n");
+                    appliedRules.add("Rule 7: Formula Mapping (COMPUTE " + target + ")");
+                    logicFound = true;
+                }
+            }
+            // IF Rule
+            else if (trimmedLine.startsWith("IF ")) {
+                method.append("        // TODO: IF statement detected - Manual review recommended\n");
+                method.append("        // ").append(trimmedLine).append("\n");
+                warnings.add(
+                        "Warning: IF statement detected in PROCEDURE DIVISION. Complex branching requires manual validation.");
+            }
+            // DISPLAY Rule
+            else if (trimmedLine.startsWith("DISPLAY ")) {
+                String msg = trimmedLine.substring(8).replace(".", "").replace("'", "\"");
+                method.append("        System.out.println(").append(msg).append(");\n");
+                logicFound = true;
+            }
+        }
+
+        if (!logicFound) {
+            method.append("        // No common business logic patterns recognized.\n");
+        }
+
+        method.append("    }\n");
+        return method.toString();
     }
 
     private String toCamelCase(String cobolField) {
         StringBuilder result = new StringBuilder();
-        String[] parts = cobolField.split("-");
+        String[] parts = cobolField.split("[-_]");
         for (int i = 0; i < parts.length; i++) {
             String part = parts[i].toLowerCase();
+            if (part.isEmpty())
+                continue;
             if (i == 0) {
                 result.append(part);
             } else {

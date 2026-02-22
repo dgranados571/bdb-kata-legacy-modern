@@ -14,6 +14,7 @@ import software.amazon.awssdk.services.s3.presigner.model.PresignedPutObjectRequ
 import software.amazon.awssdk.regions.Region;
 import java.time.Duration;
 import java.util.List;
+import software.amazon.awssdk.http.apache.ApacheHttpClient;
 
 @Service
 public class S3Service {
@@ -41,7 +42,7 @@ public class S3Service {
                 this.s3Client = S3Client.builder()
                                 .region(this.region)
                                 .credentialsProvider(StaticCredentialsProvider.create(credentials))
-                                .httpClientBuilder(software.amazon.awssdk.http.apache.ApacheHttpClient.builder())
+                                .httpClientBuilder(ApacheHttpClient.builder())
                                 .build();
 
                 this.s3Presigner = S3Presigner.builder()
@@ -70,6 +71,20 @@ public class S3Service {
                                 .build();
 
                 return s3Client.getObject(getObjectRequest, ResponseTransformer.toBytes()).asUtf8String();
+        }
+
+        public void uploadContent(String key, String content) {
+                System.out.println("Uploading content to S3: s3://" + this.bucketName + "/" + key);
+
+                PutObjectRequest putObjectRequest = PutObjectRequest.builder()
+                                .bucket(this.bucketName)
+                                .key(key)
+                                .contentType("text/plain")
+                                .build();
+
+                s3Client.putObject(putObjectRequest, RequestBody.fromString(content));
+
+                System.out.println("Upload successful.");
         }
 
         public void uploadArtifact(String key, String filePath) {

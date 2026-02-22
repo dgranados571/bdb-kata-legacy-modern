@@ -58,16 +58,20 @@ public class ModernizationController {
                     : "";
 
             String template = StreamUtils.copyToString(appDefinitionResource.getInputStream(), StandardCharsets.UTF_8);
-
             String definitionContent = template
                     .replace("${S3_BUCKET}", bucketName)
                     .replace("${S3_PREFIX}", s3Prefix);
 
-            System.out.println("Definition content: " + definitionContent);
-
-            CreateApplicationResponse response = m2OrchestratorService.createM2Application(appName,
-                    "Modernized App via Pipeline", definitionContent);
-            System.out.println("Application created: " + response.applicationId());
+            try {
+                CreateApplicationResponse response = m2OrchestratorService.createM2Application(appName,
+                        "Modernized App via Pipeline", definitionContent);
+                System.out.println("Application created: " + response.applicationId());
+                metaDatosCobol
+                        .add("[BLU-AGE-PACKAGER] M2 Application created successfully: " + response.applicationId());
+            } catch (Exception e) {
+                System.err.println("Deployment skipped/failed: " + e.getMessage());
+                metaDatosCobol.add("[BLU-AGE-REPORT] [WARNING] M2 Deployment skipped/failed: " + e.getMessage());
+            }
 
             return metaDatosCobol;
         } catch (Exception e) {
