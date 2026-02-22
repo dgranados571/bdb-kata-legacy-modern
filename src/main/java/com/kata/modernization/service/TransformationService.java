@@ -181,16 +181,12 @@ public class TransformationService {
                     appliedRules.add("Rule 7: Formula Mapping (COMPUTE " + target + ")");
                     logicFound = true;
                 }
-            }
-            // IF Rule
-            else if (trimmedLine.startsWith("IF ")) {
+            } else if (trimmedLine.startsWith("IF ")) {
                 method.append("        // TODO: IF statement detected - Manual review recommended\n");
                 method.append("        // ").append(trimmedLine).append("\n");
                 warnings.add(
                         "Warning: IF statement detected in PROCEDURE DIVISION. Complex branching requires manual validation.");
-            }
-            // DISPLAY Rule
-            else if (trimmedLine.startsWith("DISPLAY ")) {
+            } else if (trimmedLine.startsWith("DISPLAY ")) {
                 String msg = trimmedLine.substring(8).replace(".", "").replace("'", "\"");
                 method.append("        System.out.println(").append(msg).append(");\n");
                 logicFound = true;
