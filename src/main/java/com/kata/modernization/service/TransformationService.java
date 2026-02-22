@@ -18,7 +18,9 @@ public class TransformationService {
     }
 
     public List<String> transformCobolToJava(String s3Key) {
+
         List<String> logs = new ArrayList<>();
+
         List<String> appliedRules = new ArrayList<>();
         List<String> warnings = new ArrayList<>();
 
@@ -166,6 +168,9 @@ public class TransformationService {
                 Matcher m = movePattern.matcher(trimmedLine);
                 if (m.find()) {
                     String source = m.group(1).replace("'", "\"");
+                    if (!source.startsWith("\"") && !source.matches("-?\\d+(\\.\\d+)?")) {
+                        source = "this." + toCamelCase(source);
+                    }
                     String target = toCamelCase(m.group(2));
                     method.append("        this.").append(target).append(" = ").append(source).append(";\n");
                     appliedRules.add("Rule 6: Logic Mapping (MOVE " + m.group(1) + " to " + target + ")");
@@ -176,19 +181,43 @@ public class TransformationService {
                 Matcher m = computePattern.matcher(trimmedLine);
                 if (m.find()) {
                     String target = toCamelCase(m.group(1));
-                    String expression = m.group(2).replace("-", " - "); // Basic spacing for Java
-                    method.append("        this.").append(target).append(" = ").append(expression).append(";\n");
+                    String expression = m.group(2).replace("-", " - ");
+                    String[] tokens = expression.split("\\s+");
+                    StringBuilder javaExpr = new StringBuilder();
+                    for (String token : tokens) {
+                        if (token.matches("[A-Z0-9_-]+") && !token.matches("-?\\d+(\\.\\d+)?")
+                                && !token.matches("[+\\-*/()]")) {
+                            javaExpr.append("this.").append(toCamelCase(token)).append(" ");
+                        } else {
+                            javaExpr.append(token).append(" ");
+                        }
+                    }
+                    method.append("        this.").append(target).append(" = ").append(javaExpr.toString().trim())
+                            .append(";\n");
                     appliedRules.add("Rule 7: Formula Mapping (COMPUTE " + target + ")");
                     logicFound = true;
                 }
             } else if (trimmedLine.startsWith("IF ")) {
                 method.append("        // TODO: IF statement detected - Manual review recommended\n");
                 method.append("        // ").append(trimmedLine).append("\n");
-                warnings.add(
-                        "Warning: IF statement detected in PROCEDURE DIVISION. Complex branching requires manual validation.");
+                warnings.add("Warning: IF statement detected. Complex branching requires manual validation.");
             } else if (trimmedLine.startsWith("DISPLAY ")) {
-                String msg = trimmedLine.substring(8).replace(".", "").replace("'", "\"");
-                method.append("        System.out.println(").append(msg).append(");\n");
+                String content = trimmedLine.substring(8).replace(".", "").trim();
+                String[] parts = content.split("\\s+(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)"); // Split by space outside quotes
+
+                StringBuilder displayMsg = new StringBuilder();
+                for (int i = 0; i < parts.length; i++) {
+                    String part = parts[i].replace("'", "\"");
+                    if (!part.startsWith("\"")) {
+                        displayMsg.append("this.").append(toCamelCase(part));
+                    } else {
+                        displayMsg.append(part);
+                    }
+                    if (i < parts.length - 1) {
+                        displayMsg.append(" + ");
+                    }
+                }
+                method.append("        System.out.println(").append(displayMsg).append(");\n");
                 logicFound = true;
             }
         }
