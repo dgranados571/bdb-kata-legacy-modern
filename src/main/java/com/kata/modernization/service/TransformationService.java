@@ -68,18 +68,18 @@ public class TransformationService {
 
             if (cobolName.contains("FECHA") && (pic.contains("9(6)") || pic.contains("9(8)"))) {
                 javaType = "LocalDate";
-                appliedRules.add("Rule 1: Date Conversion (Mapped " + cobolName + " to LocalDate)");
+                appliedRules.add("Rule 1: Date Conversion (Mapped " + javaField + " to LocalDate)");
             } else if (pic.contains("V")) {
                 javaType = "BigDecimal";
-                appliedRules.add("Rule 2: Decimal Precision (Mapped " + cobolName + " to BigDecimal)");
+                appliedRules.add("Rule 2: Decimal Precision (Mapped " + javaField + " to BigDecimal)");
             } else if (pic.contains("9")) {
                 javaType = "Integer";
-                appliedRules.add("Rule 5: Smart Typing (Mapped " + cobolName + " to Integer)");
+                appliedRules.add("Rule 5: Smart Typing (Mapped " + javaField + " to Integer)");
             } else if (pic.contains("X")) {
                 javaType = "String";
-                appliedRules.add("Rule 5: Smart Typing (Mapped " + cobolName + " to String)");
+                appliedRules.add("Rule 8: Smart Typing (Mapped " + javaField + " to String)");
             } else {
-                warnings.add("Warning: Complex PIC format " + pic + " for " + cobolName + " might need manual review.");
+                warnings.add("Warning: Complex PIC format " + pic + " for " + javaField + " might need manual review.");
             }
 
             javaCode.append("    private ").append(javaType).append(" ").append(javaField).append(";\n");
@@ -162,6 +162,7 @@ public class TransformationService {
 
         for (String line : lines) {
             String trimmedLine = line.trim().toUpperCase();
+
             if (trimmedLine.startsWith("MOVE ")) {
                 Pattern movePattern = Pattern.compile("MOVE\\s+([^\\s]+)\\s+TO\\s+([^.\\s]+)");
                 Matcher m = movePattern.matcher(trimmedLine);
@@ -171,8 +172,44 @@ public class TransformationService {
                         source = "this." + toCamelCase(source);
                     }
                     String target = toCamelCase(m.group(2));
-                    method.append("        this.").append(target).append(" = ").append("new BigDecimal(" + source + ")")
-                            .append(";\n");
+
+                    String type = "String";
+                    for (String rule : appliedRules) {
+                        if (rule.contains(target)) {
+                            if (rule.contains("Rule 1")) {
+                                type = "LocalDate";
+                                break;
+                            } else if (rule.contains("Rule 2")) {
+                                type = "BigDecimal";
+                                break;
+                            } else if (rule.contains("Rule 5")) {
+                                type = "Integer";
+                                break;
+                            } else if (rule.contains("Rule 8")) {
+                                type = "String";
+                                break;
+                            }
+                        }
+                    }
+                    switch (type) {
+                        case "Integer":
+                            method.append("        this.").append(target).append(" = ").append(source).append(";\n");
+                            break;
+                        case "BigDecimal":
+                            method.append("        this.").append(target).append(" = ")
+                                    .append("new BigDecimal(" + source + ")").append(";\n");
+                            break;
+                        case "LocalDate":
+                            method.append("        this.").append(target).append(" = ")
+                                    .append("LocalDate.parse(" + source + ")").append(";\n");
+                            break;
+                        case "Empty":
+                            method.append("        this.").append(target).append(" = ").append(source).append(";\n");
+                            break;
+                        default:
+                            method.append("        this.").append(target).append(" = ").append(source).append(";\n");
+                            break;
+                    }
                     appliedRules.add("Rule 6: Logic Mapping (MOVE " + m.group(1) + " to " + target + ")");
                     logicFound = true;
                 }

@@ -57,7 +57,6 @@ public class ModernizationController {
     @GetMapping("/aws/applications")
     public java.util.List<ApplicationSummaryDto> listApplications() {
         try {
-            System.out.println("Requesting M2 applications...");
             return m2OrchestratorService.listM2Applications().stream()
                     .map(app -> new ApplicationSummaryDto(
                             app.applicationId(),

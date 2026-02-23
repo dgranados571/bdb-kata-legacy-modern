@@ -74,8 +74,6 @@ public class S3Service {
         }
 
         public void uploadContent(String key, String content) {
-                System.out.println("Uploading content to S3: s3://" + this.bucketName + "/" + key);
-
                 PutObjectRequest putObjectRequest = PutObjectRequest.builder()
                                 .bucket(this.bucketName)
                                 .key(key)
@@ -83,21 +81,15 @@ public class S3Service {
                                 .build();
 
                 s3Client.putObject(putObjectRequest, RequestBody.fromString(content));
-
-                System.out.println("Upload successful.");
         }
 
         public void uploadArtifact(String key, String filePath) {
-                System.out.println("Uploading artifact to S3: s3://" + this.bucketName + "/" + key);
-
                 PutObjectRequest putObjectRequest = PutObjectRequest.builder()
                                 .bucket(this.bucketName)
                                 .key(key)
                                 .build();
 
                 s3Client.putObject(putObjectRequest, RequestBody.fromString("Contenido binario simulado del JAR"));
-
-                System.out.println("Upload successful.");
         }
 
         public List<String> listBuckets() {
