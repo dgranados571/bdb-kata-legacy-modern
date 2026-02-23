@@ -22,7 +22,6 @@ public class TransformationService {
     public InfoTransformDto transformCobolToJava(String s3Key) {
 
         List<String> logs = new ArrayList<>();
-
         List<String> appliedRules = new ArrayList<>();
         List<String> warnings = new ArrayList<>();
 
@@ -41,12 +40,10 @@ public class TransformationService {
         while (matcher.find()) {
             String name = matcher.group(2);
             String pic = matcher.group(3);
-
             if (name.equalsIgnoreCase("FILLER")) {
                 appliedRules.add("Rule 3: Redundant Field Filtering (Ignored FILLER field)");
                 continue;
             }
-
             discoveredFields.add(new String[] { name, pic });
             logs.add("[BLU-AGE-ANALYZER] Component identified: " + name + " (Type: " + pic + ")");
         }
@@ -164,7 +161,6 @@ public class TransformationService {
 
         for (String line : lines) {
             String trimmedLine = line.trim().toUpperCase();
-
             if (trimmedLine.startsWith("MOVE ")) {
                 Pattern movePattern = Pattern.compile("MOVE\\s+([^\\s]+)\\s+TO\\s+([^.\\s]+)");
                 Matcher m = movePattern.matcher(trimmedLine);
