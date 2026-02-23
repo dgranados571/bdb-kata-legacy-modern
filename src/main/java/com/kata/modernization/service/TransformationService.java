@@ -162,7 +162,6 @@ public class TransformationService {
 
         for (String line : lines) {
             String trimmedLine = line.trim().toUpperCase();
-
             if (trimmedLine.startsWith("MOVE ")) {
                 Pattern movePattern = Pattern.compile("MOVE\\s+([^\\s]+)\\s+TO\\s+([^.\\s]+)");
                 Matcher m = movePattern.matcher(trimmedLine);
@@ -172,7 +171,8 @@ public class TransformationService {
                         source = "this." + toCamelCase(source);
                     }
                     String target = toCamelCase(m.group(2));
-                    method.append("        this.").append(target).append(" = ").append(source).append(";\n");
+                    method.append("        this.").append(target).append(" = ").append("new BigDecimal(" + source + ")")
+                            .append(";\n");
                     appliedRules.add("Rule 6: Logic Mapping (MOVE " + m.group(1) + " to " + target + ")");
                     logicFound = true;
                 }
@@ -181,19 +181,7 @@ public class TransformationService {
                 Matcher m = computePattern.matcher(trimmedLine);
                 if (m.find()) {
                     String target = toCamelCase(m.group(1));
-                    String expression = m.group(2).replace("-", " - ");
-                    String[] tokens = expression.split("\\s+");
-                    StringBuilder javaExpr = new StringBuilder();
-                    for (String token : tokens) {
-                        if (token.matches("[A-Z0-9_-]+") && !token.matches("-?\\d+(\\.\\d+)?")
-                                && !token.matches("[+\\-*/()]")) {
-                            javaExpr.append("this.").append(toCamelCase(token)).append(" ");
-                        } else {
-                            javaExpr.append(token).append(" ");
-                        }
-                    }
-                    method.append("        this.").append(target).append(" = ").append(javaExpr.toString().trim())
-                            .append(";\n");
+                    method.append("        ").append(buildJavaAssignment(trimmedLine)).append("\n");
                     appliedRules.add("Rule 7: Formula Mapping (COMPUTE " + target + ")");
                     logicFound = true;
                 }
@@ -203,8 +191,7 @@ public class TransformationService {
                 warnings.add("Warning: IF statement detected. Complex branching requires manual validation.");
             } else if (trimmedLine.startsWith("DISPLAY ")) {
                 String content = trimmedLine.substring(8).replace(".", "").trim();
-                String[] parts = content.split("\\s+(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)"); // Split by space outside quotes
-
+                String[] parts = content.split("\\s+(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)");
                 StringBuilder displayMsg = new StringBuilder();
                 for (int i = 0; i < parts.length; i++) {
                     String part = parts[i].replace("'", "\"");
@@ -230,6 +217,42 @@ public class TransformationService {
         return method.toString();
     }
 
+    private String buildJavaAssignment(String cobolLine) {
+        String trimmed = cobolLine.replace("COMPUTE", "").replace(".", "").trim();
+
+        String[] parts = trimmed.split("=");
+        if (parts.length != 2) {
+            return "// Error: línea COBOL inválida";
+        }
+
+        String left = parts[0].trim();
+        String right = parts[1].trim();
+
+        String leftCamel = toCamelCase(left);
+        String[] rightTokens = right.split("\\s+");
+
+        StringBuilder rightCamel = new StringBuilder();
+        for (String token : rightTokens) {
+            if (token.equals("*")) {
+                rightCamel.append(".multiply(");
+            } else if (token.equals("+")) {
+                rightCamel.append(".add(");
+            } else if (token.equals("-")) {
+                rightCamel.append(".subtract(");
+            } else if (token.equals("/")) {
+                rightCamel.append(".divide(");
+            } else {
+                rightCamel.append("this.").append(toCamelCase(token));
+            }
+        }
+        String javaRight = rightCamel.toString();
+        if (javaRight.contains("multiply(") || javaRight.contains("add(") || javaRight.contains("subtract(")
+                || javaRight.contains("divide(")) {
+            javaRight += ")";
+        }
+        return "this." + leftCamel + " = " + javaRight + ";";
+    }
+
     private String toCamelCase(String cobolField) {
         StringBuilder result = new StringBuilder();
         String[] parts = cobolField.split("[-_]");
@@ -243,6 +266,10 @@ public class TransformationService {
                 result.append(Character.toUpperCase(part.charAt(0))).append(part.substring(1));
             }
         }
-        return result.toString().replace("ws", "");
+        String valor = result.toString().replace("ws", "");
+        if (valor.isEmpty()) {
+            return valor;
+        }
+        return valor.substring(0, 1).toLowerCase() + valor.substring(1);
     }
 }
