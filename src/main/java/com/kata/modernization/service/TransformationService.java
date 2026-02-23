@@ -1,6 +1,8 @@
 package com.kata.modernization.service;
 
 import com.kata.modernization.aws.S3Service;
+import com.kata.modernization.dto.InfoTransformDto;
+
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -17,7 +19,7 @@ public class TransformationService {
         this.s3Service = s3Service;
     }
 
-    public List<String> transformCobolToJava(String s3Key) {
+    public InfoTransformDto transformCobolToJava(String s3Key) {
 
         List<String> logs = new ArrayList<>();
 
@@ -125,7 +127,7 @@ public class TransformationService {
         logs.add("[BLU-AGE-PACKAGER] Creating artifact: modernized-" + className.toLowerCase() + ".jar");
         logs.add("[BLU-AGE-PACKAGER] Success: Transformation complete.");
 
-        return logs;
+        return new InfoTransformDto(logs, appliedRules, warnings, targetKey);
     }
 
     private String extractClassName(String s3Key) {
